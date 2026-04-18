@@ -1,0 +1,130 @@
+import os
+import sys
+from insurance_predictor.components.data_ingestion import DataIngestion
+from insurance_predictor.components.data_validation import DataValidation
+from insurance_predictor.components.data_transformation import DataTransformation
+from insurance_predictor.components.model_trainer import ModelTrainer
+from insurance_predictor.components.model_evaluation import ModelEvaluation
+from insurance_predictor.components.model_pusher import ModelPusher
+from insurance_predictor.entity.config_entity import (
+    DataIngestionConfig,
+    DataValidationConfig,
+    DataTransformationConfig,
+    ModelTrainerConfig,
+    ModelEvaluationConfig,
+    ModelPusherConfig
+)
+from insurance_predictor.exception import InsuranceException
+from insurance_predictor.logger import logger
+
+
+class TrainingPipeline:
+    def __init__(self):
+        self.data_ingestion_config = DataIngestionConfig()
+        self.data_validation_config = DataValidationConfig()
+        self.data_transformation_config = DataTransformationConfig()
+        self.model_trainer_config = ModelTrainerConfig()
+        self.model_evaluation_config = ModelEvaluationConfig()
+        self.model_pusher_config = ModelPusherConfig()
+
+    def start_data_ingestion(self):
+        try:
+            logger.info("Starting data ingestion stage")
+            data_ingestion = DataIngestion(
+                data_ingestion_config=self.data_ingestion_config
+            )
+            data_ingestion_artifact = data_ingestion.initiate_data_ingestion()
+            logger.info("Data ingestion stage completed")
+            return data_ingestion_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
+
+    def start_data_validation(self, data_ingestion_artifact):
+        try:
+            logger.info("Starting data validation stage")
+            data_validation = DataValidation(
+                data_ingestion_artifact=data_ingestion_artifact,
+                data_validation_config=self.data_validation_config
+            )
+            data_validation_artifact = data_validation.initiate_data_validation()
+            logger.info("Data validation stage completed")
+            return data_validation_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
+
+    def start_data_transformation(self, data_validation_artifact):
+        try:
+            logger.info("Starting data transformation stage")
+            data_transformation = DataTransformation(
+                data_validation_artifact=data_validation_artifact,
+                data_transformation_config=self.data_transformation_config
+            )
+            data_transformation_artifact = data_transformation.initiate_data_transformation()
+            logger.info("Data transformation stage completed")
+            return data_transformation_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
+
+    def start_model_trainer(self, data_transformation_artifact):
+        try:
+            logger.info("Starting model training stage")
+            model_trainer = ModelTrainer(
+                data_transformation_artifact=data_transformation_artifact,
+                model_trainer_config=self.model_trainer_config
+            )
+            model_trainer_artifact = model_trainer.initiate_model_trainer()
+            logger.info("Model training stage completed")
+            return model_trainer_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
+
+    def start_model_evaluation(self, model_trainer_artifact, data_transformation_artifact):
+        try:
+            logger.info("Starting model evaluation stage")
+            model_evaluation = ModelEvaluation(
+                model_trainer_artifact=model_trainer_artifact,
+                data_transformation_artifact=data_transformation_artifact,
+                model_evaluation_config=self.model_evaluation_config
+            )
+            model_evaluation_artifact = model_evaluation.initiate_model_evaluation()
+            logger.info("Model evaluation stage completed")
+            return model_evaluation_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
+
+    def start_model_pusher(self, model_evaluation_artifact):
+        try:
+            logger.info("Starting model pusher stage")
+            model_pusher = ModelPusher(
+                model_evaluation_artifact=model_evaluation_artifact,
+                model_pusher_config=self.model_pusher_config
+            )
+            model_pusher_artifact = model_pusher.initiate_model_pusher()
+            logger.info("Model pusher stage completed")
+            return model_pusher_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
+
+    def run_pipeline(self):
+        try:
+            logger.info("========== Training Pipeline Started ==========")
+
+            data_ingestion_artifact = self.start_data_ingestion()
+            data_validation_artifact = self.start_data_validation(data_ingestion_artifact)
+            data_transformation_artifact = self.start_data_transformation(data_validation_artifact)
+            model_trainer_artifact = self.start_model_trainer(data_transformation_artifact)
+            model_evaluation_artifact = self.start_model_evaluation(
+                model_trainer_artifact, data_transformation_artifact
+            )
+
+            if not model_evaluation_artifact.is_model_accepted:
+                logger.info("Trained model not accepted — existing model is better")
+                return None
+
+            model_pusher_artifact = self.start_model_pusher(model_evaluation_artifact)
+
+            logger.info("========== Training Pipeline Completed ==========")
+            return model_pusher_artifact
+
+        except Exception as e:
+            raise InsuranceException(e, sys)
