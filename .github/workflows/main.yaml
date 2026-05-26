@@ -1,50 +1,155 @@
-# name: Insurance Lead Predictor CI/CD
+import os
+import sys
+from insurance_predictor.components.data_ingestion import DataIngestion
+from insurance_predictor.components.data_validation import DataValidation
+from insurance_predictor.components.data_transformation import DataTransformation
+from insurance_predictor.components.model_trainer import ModelTrainer
+from insurance_predictor.components.model_evaluation import ModelEvaluation
+from insurance_predictor.components.model_pusher import ModelPusher
+from insurance_predictor.entity.config_entity import (
+    DataIngestionConfig,
+    DataValidationConfig,
+    DataTransformationConfig,
+    ModelTrainerConfig,
+    ModelEvaluationConfig,
+    ModelPusherConfig
+)
+from insurance_predictor.exception import InsuranceException
+from insurance_predictor.logger import logger
 
-# on:
-#   push:
-#     branches:
-#       - main
-#   pull_request:
-#     branches:
-#       - main
 
-# jobs:
-#   build-and-push:
-#     runs-on: ubuntu-latest
+class TrainingPipeline:
+    def __init__(self):
+        self.data_ingestion_config = DataIngestionConfig()
+        self.data_validation_config = DataValidationConfig()
+        self.data_transformation_config = DataTransformationConfig()
+        self.model_trainer_config = ModelTrainerConfig()
+        self.model_evaluation_config = ModelEvaluationConfig()
+        self.model_pusher_config = ModelPusherConfig()
 
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v3
+    def start_data_ingestion(self):
+        try:
+            logger.info("Stage 1: Data Ingestion started")
+            data_ingestion = DataIngestion(
+                data_ingestion_config=self.data_ingestion_config
+            )
+            data_ingestion_artifact = data_ingestion.initiate_data_ingestion()
+            logger.info("Stage 1: Data Ingestion completed")
+            return data_ingestion_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
 
-#       - name: Set up Python
-#         uses: actions/setup-python@v4
-#         with:
-#           python-version: "3.10"
+    def start_data_validation(self, data_ingestion_artifact):
+        try:
+            logger.info("Stage 2: Data Validation started")
+            data_validation = DataValidation(
+                data_ingestion_artifact=data_ingestion_artifact,
+                data_validation_config=self.data_validation_config
+            )
+            data_validation_artifact = data_validation.initiate_data_validation()
+            logger.info("Stage 2: Data Validation completed")
+            return data_validation_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
 
-#       - name: Install dependencies
-#         run: |
-#           python -m pip install --upgrade pip
-#           pip install -r requirements.txt
+    def start_data_transformation(self, data_ingestion_artifact):
+        try:
+            logger.info("Stage 3: Data Transformation started")
+            data_transformation = DataTransformation(
+                data_ingestion_artifact=data_ingestion_artifact,
+                data_transformation_config=self.data_transformation_config
+            )
+            data_transformation_artifact = data_transformation.initiate_data_transformation()
+            logger.info("Stage 3: Data Transformation completed")
+            return data_transformation_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
 
-#       - name: Log in to Docker Hub
-#         uses: docker/login-action@v2
-#         with:
-#           username: ${{ secrets.DOCKERHUB_USERNAME }}
-#           password: ${{ secrets.DOCKERHUB_TOKEN }}
+    def start_model_trainer(self, data_transformation_artifact):
+        try:
+            logger.info("Stage 4: Model Training started")
+            model_trainer = ModelTrainer(
+                data_transformation_artifact=data_transformation_artifact,
+                model_trainer_config=self.model_trainer_config
+            )
+            model_trainer_artifact = model_trainer.initiate_model_trainer()
+            logger.info("Stage 4: Model Training completed")
+            return model_trainer_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
 
-#       - name: Build Docker image
-#         run: |
-#           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/insurance-lead-predictor:latest .
+    def start_model_evaluation(self, model_trainer_artifact, data_transformation_artifact):
+        try:
+            logger.info("Stage 5: Model Evaluation started")
+            model_evaluation = ModelEvaluation(
+                model_trainer_artifact=model_trainer_artifact,
+                data_transformation_artifact=data_transformation_artifact,
+                model_evaluation_config=self.model_evaluation_config
+            )
+            model_evaluation_artifact = model_evaluation.initiate_model_evaluation()
+            logger.info("Stage 5: Model Evaluation completed")
+            return model_evaluation_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
 
-#       - name: Push Docker image
-#         run: |
-#           docker push ${{ secrets.DOCKERHUB_USERNAME }}/insurance-lead-predictor:latest
+    def start_model_pusher(self, model_evaluation_artifact):
+        try:
+            logger.info("Stage 6: Model Pusher started")
+            model_pusher = ModelPusher(
+                model_evaluation_artifact=model_evaluation_artifact,
+                model_pusher_config=self.model_pusher_config
+            )
+            model_pusher_artifact = model_pusher.initiate_model_pusher()
+            logger.info("Stage 6: Model Pusher completed")
+            return model_pusher_artifact
+        except Exception as e:
+            raise InsuranceException(e, sys)
 
-#   deploy:
-#     needs: build-and-push
-#     runs-on: ubuntu-latest
+    def run_pipeline(self):
+        try:
+            logger.info("========== Training Pipeline Started ==========")
 
-#     steps:
-#       - name: Deploy to Render
-#         run: |
-#           curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+            # Stage 1
+            data_ingestion_artifact = self.start_data_ingestion()
+
+            # Stage 2
+            data_validation_artifact = self.start_data_validation(
+                data_ingestion_artifact
+            )
+
+            # Check validation passed
+            if not data_validation_artifact.validation_status:
+                raise Exception(
+                    f"Data validation failed: {data_validation_artifact.message}"
+                )
+
+            # Stage 3 — pass ingestion artifact directly
+            data_transformation_artifact = self.start_data_transformation(
+                data_ingestion_artifact
+            )
+
+            # Stage 4
+            model_trainer_artifact = self.start_model_trainer(
+                data_transformation_artifact
+            )
+
+            # Stage 5
+            model_evaluation_artifact = self.start_model_evaluation(
+                model_trainer_artifact,
+                data_transformation_artifact
+            )
+
+            if not model_evaluation_artifact.is_model_accepted:
+                logger.info("New model not accepted — existing model is better")
+                return None
+
+            # Stage 6
+            model_pusher_artifact = self.start_model_pusher(
+                model_evaluation_artifact
+            )
+
+            logger.info("========== Training Pipeline Completed ==========")
+            return model_pusher_artifact
+
+        except Exception as e:
+            raise InsuranceException(e, sys)
