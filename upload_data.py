@@ -11,51 +11,55 @@ MONGODB_URL = os.environ.get("MONGODB_URL")
 DATABASE_NAME = "insurance_db"
 COLLECTION_NAME = "insurance_data"
 
+
 def upload_data(file_path: str):
     try:
-        # Read CSV
-        print(f"Reading data from: {file_path}")
-        df = pd.read_csv(file_path)
-        print(f"Dataset shape: {df.shape}")
+        if not MONGODB_URL:
+            raise Exception("MONGODB_URL environment variable is not set in .env file")
 
-        # Drop index column if exists
+        print(f"📂 Reading data from: {file_path}")
+        df = pd.read_csv(file_path)
+        print(f"✅ Dataset loaded. Shape: {df.shape}")
+
         if "id" in df.columns:
             df.drop(columns=["id"], inplace=True)
+            print("🗑️  Dropped 'id' column")
 
-        # Convert to dictionary records
         records = df.to_dict(orient="records")
-        print(f"Total records to upload: {len(records)}")
+        print(f"📦 Total records to upload: {len(records)}")
 
-        # Connect to MongoDB
-        print("Connecting to MongoDB Atlas...")
+        print("🔌 Connecting to MongoDB Atlas...")
         ca = certifi.where()
         client = pymongo.MongoClient(MONGODB_URL, tlsCAFile=ca)
 
-        # Select database and collection
         database = client[DATABASE_NAME]
         collection = database[COLLECTION_NAME]
 
-        # Drop existing data if any
         collection.drop()
-        print("Existing collection dropped")
+        print("🗑️  Existing collection cleared")
 
-        # Insert records
         collection.insert_many(records)
-        print(f"✅ Successfully uploaded {len(records)} records to MongoDB")
-        print(f"Database: {DATABASE_NAME}")
-        print(f"Collection: {COLLECTION_NAME}")
+        print(f"✅ Successfully uploaded {len(records)} records")
+        print(f"📁 Database : {DATABASE_NAME}")
+        print(f"📁 Collection: {COLLECTION_NAME}")
 
-        # Verify
         count = collection.count_documents({})
-        print(f"✅ Verified: {count} documents in collection")
+        print(f"✅ Verified : {count} documents in collection")
 
         client.close()
+        print("\n🎉 Data upload complete!")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error during upload: {e}")
         raise e
 
+
 if __name__ == "__main__":
-    # Put the path to your downloaded train.csv here
     file_path = "train.csv"
+
+    if not os.path.exists(file_path):
+        print(f"❌ File not found: {file_path}")
+        print("Please place train.csv in the root of the project")
+        sys.exit(1)
+
     upload_data(file_path)

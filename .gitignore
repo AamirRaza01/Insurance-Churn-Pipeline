@@ -1,1 +1,42 @@
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Environment variables
 .env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Pipeline artifacts 
+artifacts/
+logs/
+saved_models/
+
+# Dataset 
+train.csv
+*.csv
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# VS Code
+.vscode/
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
